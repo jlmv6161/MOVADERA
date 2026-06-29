@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P&L · Movadera & JLM</title>
+<style>
+:root{--bg:#f1f5f9;--surface:#fff;--border:#e2e8f0;--green:#059669;--green-dim:rgba(5,150,105,.08);--red:#dc2626;--red-dim:rgba(220,38,38,.08);--amber:#d97706;--indigo:#4f46e5;--blue:#0369a1;--blue-dim:#f0f9ff;--muted:#64748b;--text:#0f172a;--r:12px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;padding:28px}
+#loading{position:fixed;inset:0;background:rgba(241,245,249,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:200}
+#loading.hidden{display:none}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .75s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading p{color:var(--muted);font-size:13px}
+
+.header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--border);gap:16px;flex-wrap:wrap}
+.header-left{display:flex;align-items:center;gap:12px}
+.logo{width:42px;height:42px;background:var(--green);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;color:#fff;flex-shrink:0}
+h1{font-size:20px;font-weight:700}
+.header-sub{font-size:12px;color:var(--muted);margin-top:3px}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.period-lbl{font-size:12px;color:var(--muted);white-space:nowrap;font-weight:500}
+.sel-month{padding:5px 10px;border-radius:6px;border:1px solid var(--border);color:var(--text);font-size:12px;font-family:inherit;background:var(--surface);cursor:pointer;height:30px}
+.sel-month:focus{outline:none;border-color:var(--indigo)}
+.btn{padding:5px 13px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--muted);font-size:12px;cursor:pointer;transition:all .15s;font-family:inherit;text-decoration:none;display:inline-flex;align-items:center;height:30px}
+.btn:hover{border-color:var(--indigo);color:var(--indigo)}
+.btn-pdf:hover{border-color:var(--green);color:var(--green)}
+.sep{width:1px;height:20px;background:var(--border)}
+
+.tabs{display:flex;gap:0;margin-bottom:22px;border-bottom:2px solid var(--border)}
+.tab{padding:10px 22px;font-size:13px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
+.tab.active{color:var(--green);border-bottom-color:var(--green)}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+.two-col{display:grid;grid-template-columns:1.1fr .9fr;gap:18px;align-items:start}
+@media(max-width:960px){.two-col{grid-template-columns:1fr}}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:22px 24px;margin-bottom:18px}
+.card-title{font-size:15px;font-weight:700;margin-bottom:3px}
+.card-sub{font-size:12px;color:var(--muted);margin-bottom:18px}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:6px}
+@media(max-width:700px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px 14px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.kpi.k-g::before{background:var(--green)}.kpi.k-r::before{background:var(--red)}.kpi.k-a::before{background:var(--amber)}.kpi.k-b::before{background:var(--blue)}
+.kpi-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:4px}
+.kpi-val{font-size:17px;font-weight:700;letter-spacing:-.3px}
+.kpi-val.g{color:var(--green)}.kpi-val.r{color:var(--red)}.kpi-val.a{color:var(--amber)}.kpi-val.b{color:var(--blue)}
+.kpi-hint{font-size:10px;color:var(--muted);margin-top:2px}
+
+/* Monthly breakdown table */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:18px}
+.month-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.month-tbl th{padding:7px 11px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);border-bottom:2px solid var(--border);white-space:nowrap;background:var(--bg)}
+.month-tbl th:first-child{text-align:left;min-width:90px;position:sticky;left:0;z-index:1;background:var(--bg)}
+.month-tbl td{padding:7px 11px;text-align:right;border-bottom:1px solid rgba(0,0,0,.04);white-space:nowrap}
+.month-tbl td:first-child{text-align:left;font-weight:600;position:sticky;left:0;background:var(--surface);z-index:1}
+.month-tbl tr:hover td{background:rgba(0,0,0,.02)}
+.month-tbl tr:hover td:first-child{background:rgba(241,245,249,.8)}
+.month-tbl tr.total-row td{border-top:2px solid var(--border);font-weight:700;border-bottom:none;background:rgba(0,0,0,.02)}
+.month-tbl tr.total-row td:first-child{background:rgba(0,0,0,.04)}
+.pos{color:var(--green)}.neg{color:var(--red)}.mut{color:var(--muted)}.b{color:var(--blue)}
+.empty-months{padding:28px 0;text-align:center;color:var(--muted);font-size:13px}
+
+/* P&L rows */
+.pnl-section{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);padding:14px 0 4px;display:flex;gap:6px}
+.pnl-row{display:flex;align-items:baseline;gap:6px;padding:6px 0;border-bottom:1px solid rgba(0,0,0,.04)}
+.pnl-row.indent .pnl-lbl{padding-left:16px;font-size:13px}
+.pnl-row.sub{border-top:1px solid var(--border);padding-top:8px;margin-top:2px}
+.pnl-row.sub .pnl-lbl{font-weight:600;font-size:13px;padding-left:16px}
+.pnl-row.hl{background:rgba(0,0,0,.025);border-radius:6px;padding:8px 10px;margin:6px 0;border:none}
+.pnl-row.hl .pnl-lbl{font-weight:700;font-size:13px}
+.pnl-row.ebit{background:var(--green-dim);border-radius:8px;padding:9px 12px;margin:8px 0;border:none}
+.pnl-row.ebit .pnl-lbl{font-weight:700}
+.pnl-row.net{border-radius:8px;padding:10px 12px;margin:10px 0;border:none}
+.pnl-row.net-pos{background:var(--green)}.pnl-row.net-neg{background:var(--red)}
+.pnl-lbl{flex:1;font-size:13px;color:var(--text)}
+.pnl-pct{min-width:50px;text-align:right;font-size:11px;color:var(--muted)}
+.pnl-amt{min-width:105px;text-align:right;font-size:13px;font-weight:600}
+.pnl-amt.pos{color:var(--green)}.pnl-amt.neg{color:var(--red)}.pnl-amt.mut{color:var(--muted)}.pnl-amt.wht{color:#fff}
+
+/* IGV box */
+.igv-box{background:var(--blue-dim);border:1px solid #bae6fd;border-radius:10px;padding:16px 18px}
+.igv-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--blue);margin-bottom:10px}
+.igv-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(3,105,161,.1);font-size:13px}
+.igv-row:last-child{border-bottom:none}
+.igv-row.igv-total{font-weight:700;border-top:1px solid #bae6fd;margin-top:4px;padding-top:8px}
+.igv-amt.d{color:var(--red)}.igv-amt.c{color:var(--green)}.igv-amt.n{color:var(--blue);font-weight:700}
+.igv-footer{margin-top:10px;font-size:11px;color:var(--blue);line-height:1.6}
+
+/* Det table */
+.det-hdr{display:flex;gap:6px;padding:7px 0;border-bottom:1px solid var(--border);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.det-row{display:flex;gap:6px;padding:7px 0;border-bottom:1px solid rgba(0,0,0,.04);font-size:13px}
+.det-row:last-child{border-bottom:none}
+.det-lbl{flex:1}
+.det-amt{min-width:100px;text-align:right;font-weight:600}
+.det-pct{min-width:52px;text-align:right;font-size:11px;color:var(--muted)}
+.det-row.det-total{border-top:2px solid var(--border);font-weight:700;padding-top:9px;margin-top:2px}
+
+.note-box{font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:10px 12px;margin-top:14px;line-height:1.6}
+
+footer{text-align:center;color:var(--muted);font-size:11px;margin-top:28px;padding-top:14px;border-top:1px solid var(--border)}
+
+#print-header{display:none}
+@media print{
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  body{padding:12px;background:#fff!important}
+  #loading,.controls,.tabs,footer{display:none!important}
+  .two-col{grid-template-columns:1fr 1fr!important}
+  #print-header{display:flex;justify-content:space-between;padding-bottom:12px;margin-bottom:16px;border-bottom:2px solid #e2e8f0}
+  .tab-panel{display:block!important}
+}
+</style>
+</head>
+<body>
+<div id="loading"><div class="spinner"></div><p>Calculando P&L…</p></div>
+
+<div id="print-header">
+  <div style="font-size:15px;font-weight:700">Estado de Resultados · Movadera SAC & JLM Personal</div>
+  <div id="ph-date" style="font-size:12px;color:#64748b"></div>
+</div>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo">M</div>
+    <div>
+      <h1>Estado de Resultados (P&amp;L)</h1>
+      <div class="header-sub" id="header-sub">Movadera SAC · JLM Personal · datos en tiempo real</div>
+    </div>
+  </div>
+  <div class="controls">
+    <span class="period-lbl">Desde</span>
+    <select id="sel-from" class="sel-month" onchange="applyFilter()"></select>
+    <span class="period-lbl">Hasta</span>
+    <select id="sel-to" class="sel-month" onchange="applyFilter()"></select>
+    <div class="sep"></div>
+    <button class="btn btn-pdf" onclick="downloadPDF()">⬇ PDF</button>
+    <a class="btn" href="dashboard.html">← Dashboard</a>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="setTab('mov',this)">Movadera SAC</div>
+  <div class="tab" onclick="setTab('jlm',this)">JLM Personal</div>
+</div>
+
+<!-- Movadera -->
+<div class="tab-panel active" id="tab-mov">
+
+  <!-- KPIs -->
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title">Movadera SAC</div>
+    <div class="card-sub" id="mov-sub">—</div>
+    <div class="kpis" id="mov-kpis"></div>
+  </div>
+
+  <!-- Monthly table -->
+  <div class="card">
+    <div class="card-title">Resultados por mes</div>
+    <div class="card-sub">Desglose mensual del período seleccionado</div>
+    <div class="tbl-wrap">
+      <table class="month-tbl" id="mov-monthly"></table>
+    </div>
+  </div>
+
+  <!-- Detail -->
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <div class="card-title">P&L Acumulado del Período</div>
+        <div class="card-sub" id="mov-sub2">—</div>
+        <div id="mov-pnl"></div>
+        <div class="igv-box" id="mov-igv" style="margin-top:18px"></div>
+        <div class="note-box">⚠ Estimación referencial. IGV calculado asumiendo precios inclusivos de IGV 18%. IR al 29.5% (Régimen General). Verificar con su contador.</div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title">Desglose de Gastos</div>
+        <div class="card-sub">Movadera SAC · por categoría</div>
+        <div id="mov-det"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Sustento Documentario</div>
+        <div class="card-sub">Base para crédito fiscal IGV</div>
+        <div id="mov-doc"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- JLM -->
+<div class="tab-panel" id="tab-jlm">
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title">JLM Personal</div>
+    <div class="card-sub" id="jlm-sub">—</div>
+    <div class="kpis" id="jlm-kpis"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Resultados por mes</div>
+    <div class="card-sub">Desglose mensual del período seleccionado</div>
+    <div class="tbl-wrap">
+      <table class="month-tbl" id="jlm-monthly"></table>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <div class="card-title">P&L Acumulado del Período</div>
+        <div class="card-sub" id="jlm-sub2">—</div>
+        <div id="jlm-pnl"></div>
+        <div class="igv-box" id="jlm-igv" style="margin-top:18px"></div>
+        <div class="note-box">⚠ Estimación referencial basada en movimientos registrados en cuentas personales. El IGV aplica únicamente si se emiten comprobantes como persona natural con RUC.</div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title">Desglose de Gastos</div>
+        <div class="card-sub">JLM Personal · por categoría</div>
+        <div id="jlm-det"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Sustento Documentario</div>
+        <div class="card-sub">Base para crédito fiscal IGV</div>
+        <div id="jlm-doc"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>Movadera · P&L Financiero · Datos en tiempo real desde Google Sheets · <span id="footer-ts">—</span></footer>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────
+const SHEETS = [
+  { label:'Personal', id:'1pncK_efHSrWowzbkpTkpsqXFVMJDMQTy2oqO0MjnPKc',
+    sheet:'01 Gastos e ingresos Movadera (Respuestas)',
+    cols:{date:2,income:11,expense:12,category:13,description:5,method:6,doctype:7,project:8} },
+  { label:'SAC', id:'1Av2QRuCJdFqNE5Rd5xhos7OYjm5-eROpeT11_uzlvsw',
+    sheet:'06 MOVADERA SAC - REGISTRO INGRESOS Y SALIDAS (Respuestas)',
+    cols:{date:2,income:10,expense:11,category:12,description:5,method:6,doctype:7,project:8} }
+];
+const CC_SHEETS = [
+  { id:'1llnu6JDhxbTUYy23RsItyk9XiTecgYkumtOytl5Ol1c', person:'Khybanna' },
+  { id:'1fIcPowqllVYyEwElnwTOofq_fBK8C84uETSM1xw0tV0', person:'Carlos' }
+];
+const EXCL_CATS = ['movimiento entre cuentas','movimiento entre cuenta','refacturacion','refacturación'];
+const EXCL_PROJ = ['errores en operaciones'];
+const IGV = 18/118;
+const MES_S = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+// ── JSONP ─────────────────────────────────────────────────────────────────
+const _cbs=new Map(); let _rid=0;
+window.google=window.google||{}; window.google.visualization=window.google.visualization||{};
+window.google.visualization.Query=window.google.visualization.Query||{};
+window.google.visualization.Query.setResponse=d=>{const cb=_cbs.get(String(d.reqId));if(cb){_cbs.delete(String(d.reqId));cb(d);}};
+function fetchGviz(id,sheet){
+  const reqId=String(_rid++);
+  return new Promise((res,rej)=>{
+    const t=setTimeout(()=>{_cbs.delete(reqId);rej(new Error('Timeout'));},15000);
+    _cbs.set(reqId,d=>{clearTimeout(t);d&&d.table?res(d.table):rej(new Error('Sin datos'));});
+    const s=document.createElement('script');
+    s.onerror=()=>{clearTimeout(t);_cbs.delete(reqId);rej(new Error('Red'));};
+    s.src='https://docs.google.com/spreadsheets/d/'+id+'/gviz/tq?tqx=out:json;reqId:'+reqId+(sheet?'&sheet='+encodeURIComponent(sheet):'');
+    document.head.appendChild(s);
+  });
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function parseDate(v){
+  if(!v)return null;
+  if(typeof v==='string'){const m=v.match(/Date\((\d+),(\d+),(\d+)/);if(m)return new Date(+m[1],+m[2],+m[3]);const p=v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(p)return new Date(+p[3],+p[2]-1,+p[1]);}
+  if(v instanceof Date)return v;
+  if(typeof v==='number')return new Date(v);
+  return null;
+}
+const fmt=n=>'S/ '+Math.abs(n).toLocaleString('es-PE',{minimumFractionDigits:0,maximumFractionDigits:0});
+const fmtC=(n,cls)=>`<span class="${cls||''}" style="font-weight:600">${n===0?'<span style="color:var(--muted);font-weight:400">—</span>':fmt(n)}</span>`;
+const pct=(n,d)=>d>0?(n/d*100).toFixed(1)+'%':'—';
+const pctC=(n,d)=>{if(d<=0)return'<span style="color:var(--muted)">—</span>';const v=n/d*100;return`<span style="color:${v>=0?'var(--green)':'var(--red)'};font-weight:600">${v>=0?'+':''}${v.toFixed(1)}%</span>`;};
+const sum=(arr,fn)=>arr.reduce((s,r)=>s+(fn?fn(r):r),0);
+const mKey=(y,m)=>`${y}-${String(m).padStart(2,'0')}`;
+
+// ── Parse ─────────────────────────────────────────────────────────────────
+function parseSheet(table,cfg){
+  const cols=table.cols||[];
+  const fi=kw=>cols.findIndex(c=>c.label&&c.label.toLowerCase().includes(kw));
+  let{date:di,income:ii,expense:ei,category:ci,description:di2,method:mi,doctype:doci,project:pi}=cfg.cols;
+  const autoDate=fi('operaci');if(autoDate>=0)di=autoDate;
+  const autoCat=fi('tipo de gasto');if(autoCat>=0)ci=autoCat;
+  const gv=(row,i)=>{if(i<0||!row.c||!row.c[i])return null;const c=row.c[i];return c.v!==null&&c.v!==undefined?c.v:(c.f||null);};
+  const gn=(row,i)=>{const v=gv(row,i);if(typeof v==='number')return v;if(typeof v==='string')return parseFloat(v.replace(/,/g,''))||0;return 0;};
+  const gs=(row,i)=>{const v=gv(row,i);return v?String(v).trim():'';};
+  return(table.rows||[]).filter(r=>r&&r.c).map(r=>{
+    const date=parseDate(gv(r,di));if(!date)return null;
+    const inc=gn(r,ii),exp=gn(r,ei);if(inc===0&&exp===0)return null;
+    const catStr=gs(r,ci)||'Otros';
+    const projStr=gs(r,pi);
+    const docStr=gs(r,doci).toLowerCase();
+    if(EXCL_CATS.some(x=>catStr.toLowerCase().includes(x)))return null;
+    if(EXCL_PROJ.some(x=>projStr.toLowerCase().includes(x)))return null;
+    return{date,year:date.getFullYear(),month:date.getMonth()+1,
+      income:inc,expense:exp,category:catStr,
+      description:gs(r,di2),doctype:docStr,method:gs(r,mi),
+      project:projStr||'Sin proyecto',source:cfg.label};
+  }).filter(Boolean);
+}
+
+function parseCCSheet(table,person){
+  const gv=(row,i)=>{if(!row.c||!row.c[i])return null;const c=row.c[i];return c.v!==null&&c.v!==undefined?c.v:(c.f||null);};
+  const gn=(row,i)=>{const v=gv(row,i);return typeof v==='number'?v:(typeof v==='string'?parseFloat(v.replace(/,/g,''))||0:0);};
+  return(table.rows||[]).filter(r=>r&&r.c).map(r=>{
+    const date=parseDate(gv(r,2));if(!date)return null;
+    const amount=gn(r,5);if(amount<=0)return null;
+    const proj=String(gv(r,7)||'').trim();
+    if(EXCL_PROJ.some(x=>proj.toLowerCase().includes(x)))return null;
+    return{date,year:date.getFullYear(),month:date.getMonth()+1,
+      expense:amount,income:0,category:'Caja Chica',
+      description:String(gv(r,4)||'').trim(),
+      doctype:String(gv(r,6)||'').trim().toLowerCase(),
+      method:'',project:proj,source:'CC-'+person};
+  }).filter(Boolean);
+}
+
+// ── Classify ──────────────────────────────────────────────────────────────
+const CAT_MAP={
+  planilla:/planilla|remuner|sueldo|salario|gratificaci|essalud|cts|beneficio/,
+  materiales:/material|insumo|tablero|melamine|madera|aluminio|vidrio|herraje|pintura|silicon|silicone|fierro|acero|ferret|tornillo|bisagra|jalador|rueda|corred|canto|pegamento|perfil|tubo|lamina|tela|espuma|cuero|tapiz/,
+  servicios:/servicio|contrat|instalac|carpinter|pintor|electric|soldad|tapicero|lacado|acabado|mantenimien|tercero|subcontrat/,
+  equipos:/herramienta|equipo|maquina|sierra|taladro|router|compresor|lija|disco|broca/,
+  transporte:/transport|flete|envio|courier|movilidad|camion|taxi|uber/,
+  admin:/administr|oficina|alquiler|agua|luz|internet|telefon|utile|limpiez|seguro|banco|comision|notari/,
+  marketing:/publicidad|marketing|web|redes|social|facebook|instagram|diseño/,
+};
+function classifyExp(r){
+  if(r.category==='Caja Chica')return'cc';
+  const s=(r.category+' '+r.description).toLowerCase();
+  for(const[k,rx]of Object.entries(CAT_MAP)){if(rx.test(s))return k;}
+  return'otros';
+}
+const isFactura=r=>r.doctype&&r.doctype.includes('factura');
+const isBoleta =r=>r.doctype&&r.doctype.includes('boleta');
+const CAT_LABELS={
+  materiales:'Materiales e insumos',servicios:'Servicios de terceros',
+  equipos:'Herramientas y equipos',transporte:'Transporte y fletes',
+  cc:'Caja chica operativa',planilla:'Planilla y remuneraciones',
+  admin:'Gastos administrativos',marketing:'Marketing y publicidad',otros:'Otros gastos'
+};
+
+// ── Data & filter ─────────────────────────────────────────────────────────
+let DATA={sac:[],personal:[],cc:[]};
+let filterFrom='',filterTo='';
+
+function getRows(src){
+  return DATA[src].filter(r=>{
+    const k=mKey(r.year,r.month);
+    return k>=filterFrom&&k<=filterTo;
+  });
+}
+
+function getMonthsInRange(){
+  if(!filterFrom||!filterTo)return[];
+  const[fy,fm]=filterFrom.split('-').map(Number);
+  const[ty,tm]=filterTo.split('-').map(Number);
+  const out=[];
+  let y=fy,m=fm;
+  while(y<ty||(y===ty&&m<=tm)){
+    out.push({year:y,month:m,key:mKey(y,m)});
+    m++;if(m>12){m=1;y++;}
+  }
+  return out;
+}
+
+// ── Period selects ────────────────────────────────────────────────────────
+function populateSelects(){
+  const all=[...DATA.sac,...DATA.personal,...DATA.cc];
+  const set=new Set(all.map(r=>mKey(r.year,r.month)));
+  const months=[...set].sort();
+  if(!months.length)return;
+  const toLabel=k=>{const[y,m]=k.split('-');return MES_S[parseInt(m)-1]+' '+y;};
+  const html=months.map(k=>`<option value="${k}">${toLabel(k)}</option>`).join('');
+  const sf=document.getElementById('sel-from');
+  const st=document.getElementById('sel-to');
+  sf.innerHTML=html;st.innerHTML=html;
+  sf.value=months[0];
+  st.value=months[months.length-1];
+  filterFrom=months[0];filterTo=months[months.length-1];
+}
+
+function applyFilter(){
+  filterFrom=document.getElementById('sel-from').value;
+  filterTo=document.getElementById('sel-to').value;
+  if(filterFrom>filterTo){
+    filterTo=filterFrom;
+    document.getElementById('sel-to').value=filterTo;
+  }
+  render();
+}
+
+function setTab(id,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-'+id).classList.add('active');
+}
+
+// ── Compute P&L ───────────────────────────────────────────────────────────
+function computeMovPNL(sacRows,ccRows){
+  const incRows=sacRows.filter(r=>r.income>0);
+  const allExp=[...sacRows.filter(r=>r.expense>0),...ccRows];
+  const income=sum(incRows,r=>r.income);
+  const igvVentas=sum(incRows.filter(r=>isFactura(r)||isBoleta(r)),r=>r.income*IGV);
+  const incomeNet=income-igvVentas;
+  const expByCat={};
+  allExp.forEach(r=>{const k=classifyExp(r);expByCat[k]=(expByCat[k]||0)+r.expense;});
+  const costoKeys=['materiales','servicios','equipos','transporte','cc'];
+  const opexKeys=['planilla','admin','marketing','otros'];
+  const cogs=costoKeys.reduce((s,k)=>s+(expByCat[k]||0),0);
+  const opex=opexKeys.reduce((s,k)=>s+(expByCat[k]||0),0);
+  const igvCredito=sum(allExp.filter(isFactura),r=>r.expense*IGV);
+  const igvNeto=Math.max(0,igvVentas-igvCredito);
+  const utilBruta=incomeNet-cogs;
+  const ebitda=utilBruta-opex;
+  const ir=Math.max(0,ebitda*0.295);
+  const utilNeta=ebitda-ir;
+  return{income,igvVentas,incomeNet,expByCat,cogs,opex,igvCredito,igvNeto,utilBruta,ebitda,ir,utilNeta,allExp};
+}
+
+function computeJLMPNL(persRows){
+  const incRows=persRows.filter(r=>r.income>0);
+  const expRows=persRows.filter(r=>r.expense>0);
+  const income=sum(incRows,r=>r.income);
+  const expTotal=sum(expRows,r=>r.expense);
+  const balance=income-expTotal;
+  const igvVentas=sum(incRows.filter(r=>isFactura(r)||isBoleta(r)),r=>r.income*IGV);
+  const igvCredito=sum(expRows.filter(isFactura),r=>r.expense*IGV);
+  const igvNeto=Math.max(0,igvVentas-igvCredito);
+  const expByCat={};
+  expRows.forEach(r=>{const k=classifyExp(r);expByCat[k]=(expByCat[k]||0)+r.expense;});
+  const incByCat={};
+  incRows.forEach(r=>{const k=r.category||'Otros';incByCat[k]=(incByCat[k]||0)+r.income;});
+  return{income,expTotal,balance,igvVentas,igvCredito,igvNeto,expByCat,incByCat,expRows};
+}
+
+// ── Render helpers ────────────────────────────────────────────────────────
+function rLine(lbl,amt,amtCls,pctVal,indent=true){
+  return`<div class="pnl-row${indent?' indent':''}">
+    <span class="pnl-lbl">${lbl}</span>
+    <span class="pnl-pct">${pctVal||''}</span>
+    <span class="pnl-amt ${amtCls}">${amt===0?'<span style="color:var(--muted)">—</span>':fmt(amt)}</span>
+  </div>`;
+}
+function rSub(lbl,amt,amtCls,pctVal=''){
+  return`<div class="pnl-row sub">
+    <span class="pnl-lbl">${lbl}</span>
+    <span class="pnl-pct">${pctVal}</span>
+    <span class="pnl-amt ${amtCls}" style="font-weight:700">${fmt(amt)}</span>
+  </div>`;
+}
+function rHL(lbl,amt,amtCls,pctVal='',cls='hl'){
+  const isNet=cls.includes('net');
+  return`<div class="pnl-row ${cls}">
+    <span class="pnl-lbl" style="${isNet?'color:#fff;font-weight:800;font-size:14px':'font-weight:700'}">${lbl}</span>
+    <span class="pnl-pct" style="${isNet?'color:rgba(255,255,255,.65)':''}">${pctVal}</span>
+    <span class="pnl-amt ${isNet?'wht':amtCls}" style="font-weight:${isNet?800:700};font-size:${isNet?15:13}px">${fmt(amt)}</span>
+  </div>`;
+}
+function rSect(lbl){return`<div class="pnl-section"><span style="flex:1">${lbl}</span></div>`;}
+
+// ── Monthly table ─────────────────────────────────────────────────────────
+function buildMovMonthly(){
+  const months=getMonthsInRange();
+  if(!months.length){
+    document.getElementById('mov-monthly').innerHTML='<tr><td class="empty-months">Sin datos en el período seleccionado</td></tr>';
+    return;
+  }
+  const rows=months.map(({year,month})=>{
+    const sac=DATA.sac.filter(r=>r.year===year&&r.month===month);
+    const cc =DATA.cc.filter(r=>r.year===year&&r.month===month);
+    return{label:MES_S[month-1]+' '+year,...computeMovPNL(sac,cc)};
+  });
+  const T={income:0,igvVentas:0,incomeNet:0,cogs:0,utilBruta:0,opex:0,ebitda:0,ir:0,utilNeta:0,igvNeto:0};
+  rows.forEach(r=>{for(const k of Object.keys(T))T[k]+=r[k]||0;});
+  const td=(v,cls='')=>`<td>${fmtC(Math.round(v),cls)}</td>`;
+  const rowsHtml=rows.map(r=>`<tr>
+    <td>${r.label}</td>
+    ${td(r.income,'pos')}
+    ${td(r.igvVentas,'neg')}
+    ${td(r.incomeNet,'pos')}
+    ${td(r.cogs,'neg')}
+    ${td(r.utilBruta,r.utilBruta>=0?'pos':'neg')}
+    ${td(r.opex,'neg')}
+    <td>${pctC(r.ebitda,r.incomeNet)}</td>
+    ${td(r.ebitda,r.ebitda>=0?'pos':'neg')}
+    ${td(r.igvNeto,'b')}
+  </tr>`).join('');
+  document.getElementById('mov-monthly').innerHTML=`
+    <thead><tr>
+      <th style="text-align:left">Mes</th>
+      <th>Ingresos</th><th>(-) IGV Ventas</th><th>Ing. Neto</th>
+      <th>COGS</th><th>Util. Bruta</th><th>OPEX</th>
+      <th>Margen</th><th>EBITDA</th><th>IGV Neto</th>
+    </tr></thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot><tr class="total-row">
+      <td>TOTAL</td>
+      ${td(T.income,'pos')}
+      ${td(T.igvVentas,'neg')}
+      ${td(T.incomeNet,'pos')}
+      ${td(T.cogs,'neg')}
+      ${td(T.utilBruta,T.utilBruta>=0?'pos':'neg')}
+      ${td(T.opex,'neg')}
+      <td>${pctC(T.ebitda,T.incomeNet)}</td>
+      ${td(T.ebitda,T.ebitda>=0?'pos':'neg')}
+      ${td(T.igvNeto,'b')}
+    </tr></tfoot>`;
+}
+
+function buildJLMMonthly(){
+  const months=getMonthsInRange();
+  if(!months.length){
+    document.getElementById('jlm-monthly').innerHTML='<tr><td class="empty-months">Sin datos en el período seleccionado</td></tr>';
+    return;
+  }
+  const rows=months.map(({year,month})=>{
+    const pers=DATA.personal.filter(r=>r.year===year&&r.month===month);
+    return{label:MES_S[month-1]+' '+year,...computeJLMPNL(pers)};
+  });
+  const T={income:0,expTotal:0,balance:0,igvVentas:0,igvCredito:0,igvNeto:0};
+  rows.forEach(r=>{for(const k of Object.keys(T))T[k]+=r[k]||0;});
+  const td=(v,cls='')=>`<td>${fmtC(Math.round(v),cls)}</td>`;
+  const rowsHtml=rows.map(r=>`<tr>
+    <td>${r.label}</td>
+    ${td(r.income,'pos')}
+    ${td(r.expTotal,'neg')}
+    <td>${pctC(r.balance,r.income)}</td>
+    ${td(r.balance,r.balance>=0?'pos':'neg')}
+    ${td(r.igvCredito,'pos')}
+    ${td(r.igvNeto,'b')}
+  </tr>`).join('');
+  document.getElementById('jlm-monthly').innerHTML=`
+    <thead><tr>
+      <th style="text-align:left">Mes</th>
+      <th>Ingresos</th><th>Gastos</th><th>Margen</th><th>Balance</th>
+      <th>Crédito Fiscal</th><th>IGV Neto</th>
+    </tr></thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot><tr class="total-row">
+      <td>TOTAL</td>
+      ${td(T.income,'pos')}
+      ${td(T.expTotal,'neg')}
+      <td>${pctC(T.balance,T.income)}</td>
+      ${td(T.balance,T.balance>=0?'pos':'neg')}
+      ${td(T.igvCredito,'pos')}
+      ${td(T.igvNeto,'b')}
+    </tr></tfoot>`;
+}
+
+// ── Build Movadera P&L ────────────────────────────────────────────────────
+function buildMov(){
+  const sacRows=getRows('sac');
+  const ccRows =getRows('cc');
+  const p=computeMovPNL(sacRows,ccRows);
+  const {income,igvVentas,incomeNet,expByCat,cogs,opex,igvCredito,igvNeto,utilBruta,ebitda,ir,utilNeta,allExp}=p;
+
+  const[fy,fm]=filterFrom.split('-').map(Number);
+  const[ty,tm]=filterTo.split('-').map(Number);
+  const fromLbl=MES_S[fm-1]+' '+fy;
+  const toLbl  =MES_S[tm-1]+' '+ty;
+  const lbl=filterFrom===filterTo?fromLbl:`${fromLbl} – ${toLbl}`;
+  document.getElementById('mov-sub').textContent=lbl;
+  document.getElementById('mov-sub2').textContent=lbl;
+
+  document.getElementById('mov-kpis').innerHTML=`
+    <div class="kpi k-g"><div class="kpi-lbl">Ingresos brutos</div><div class="kpi-val g">${fmt(income)}</div><div class="kpi-hint">c/ IGV incluido</div></div>
+    <div class="kpi ${ebitda>=0?'k-g':'k-r'}"><div class="kpi-lbl">EBITDA</div><div class="kpi-val ${ebitda>=0?'g':'r'}">${fmt(ebitda)}</div><div class="kpi-hint">margen ${pct(ebitda,incomeNet)}</div></div>
+    <div class="kpi ${utilNeta>=0?'k-g':'k-r'}"><div class="kpi-lbl">Utilidad Neta Est.</div><div class="kpi-val ${utilNeta>=0?'g':'r'}">${fmt(utilNeta)}</div><div class="kpi-hint">IR 29.5% aplicado</div></div>
+    <div class="kpi k-b"><div class="kpi-lbl">IGV Neto a pagar</div><div class="kpi-val b">${fmt(igvNeto)}</div><div class="kpi-hint">débito − crédito</div></div>`;
+
+  document.getElementById('mov-pnl').innerHTML=`
+    ${rSect('INGRESOS')}
+    ${rLine('Cobros por proyectos',income,'pos',pct(income,income))}
+    ${rLine('(-) IGV débito fiscal 18%',igvVentas,'neg','-'+pct(igvVentas,income))}
+    ${rSub('Ingresos netos (base imponible)',incomeNet,'pos',pct(incomeNet,income))}
+    ${rSect('COSTO DE VENTAS (COGS)')}
+    ${expByCat.materiales?rLine('Materiales e insumos',expByCat.materiales,'neg','-'+pct(expByCat.materiales,incomeNet)):''}
+    ${expByCat.servicios ?rLine('Servicios de terceros',expByCat.servicios,'neg','-'+pct(expByCat.servicios,incomeNet)):''}
+    ${expByCat.equipos   ?rLine('Herramientas y equipos',expByCat.equipos,'neg','-'+pct(expByCat.equipos,incomeNet)):''}
+    ${expByCat.transporte?rLine('Transporte y fletes',expByCat.transporte,'neg','-'+pct(expByCat.transporte,incomeNet)):''}
+    ${expByCat.cc        ?rLine('Caja chica operativa',expByCat.cc,'neg','-'+pct(expByCat.cc,incomeNet)):''}
+    ${rSub('Total COGS',cogs,'neg','-'+pct(cogs,incomeNet))}
+    ${rHL('UTILIDAD BRUTA',utilBruta,utilBruta>=0?'pos':'neg',pct(utilBruta,incomeNet),'hl')}
+    ${rSect('GASTOS OPERATIVOS (OPEX)')}
+    ${expByCat.planilla  ?rLine('Planilla y remuneraciones',expByCat.planilla,'neg','-'+pct(expByCat.planilla,incomeNet)):''}
+    ${expByCat.admin     ?rLine('Gastos administrativos',expByCat.admin,'neg','-'+pct(expByCat.admin,incomeNet)):''}
+    ${expByCat.marketing ?rLine('Marketing y publicidad',expByCat.marketing,'neg','-'+pct(expByCat.marketing,incomeNet)):''}
+    ${expByCat.otros     ?rLine('Otros gastos',expByCat.otros,'neg','-'+pct(expByCat.otros,incomeNet)):''}
+    ${rSub('Total OPEX',opex,'neg','-'+pct(opex,incomeNet))}
+    ${rHL('UTILIDAD OPERATIVA (EBITDA)',ebitda,ebitda>=0?'pos':'neg',pct(ebitda,incomeNet),'ebit')}
+    ${rSect('IMPUESTO A LA RENTA')}
+    ${rLine('Utilidad antes de IR',ebitda,ebitda>=0?'pos':'neg','')}
+    ${rLine('IR estimado 29.5% (Régimen General)',ir,'neg','')}
+    ${rHL('UTILIDAD NETA ESTIMADA',utilNeta,utilNeta>=0?'pos':'neg',pct(utilNeta,incomeNet),utilNeta>=0?'net net-pos':'net net-neg')}`;
+
+  document.getElementById('mov-igv').innerHTML=`
+    <div class="igv-title">⚖ Posición IGV · ${lbl}</div>
+    <div class="igv-row"><span>IGV débito fiscal (ventas con factura/boleta)</span><span class="igv-amt d">${fmt(igvVentas)}</span></div>
+    <div class="igv-row"><span>(-) IGV crédito fiscal (compras con factura)</span><span class="igv-amt c">${fmt(igvCredito)}</span></div>
+    <div class="igv-row igv-total"><span>IGV NETO A PAGAR A SUNAT</span><span class="igv-amt n">${fmt(igvNeto)}</span></div>
+    <div class="igv-footer">Factor IGV: 18/118 (precio incluye IGV). Solo facturas de compra generan crédito fiscal.</div>`;
+
+  // det table
+  const costoKeys=['materiales','servicios','equipos','transporte','cc'];
+  const opexKeys=['planilla','admin','marketing','otros'];
+  const order=[...costoKeys,...opexKeys];
+  const totalExp=order.reduce((s,k)=>s+(expByCat[k]||0),0);
+  document.getElementById('mov-det').innerHTML=`
+    <div class="det-hdr"><span class="det-lbl">Categoría</span><span class="det-amt">Monto</span><span class="det-pct">% Ing.</span></div>
+    ${order.filter(k=>expByCat[k]>0).map(k=>`<div class="det-row">
+      <span class="det-lbl">${CAT_LABELS[k]}</span>
+      <span class="det-amt" style="color:var(--red)">${fmt(expByCat[k])}</span>
+      <span class="det-pct">${pct(expByCat[k],income)}</span>
+    </div>`).join('')}
+    <div class="det-row det-total"><span class="det-lbl">TOTAL GASTOS</span><span class="det-amt" style="color:var(--red)">${fmt(totalExp)}</span><span class="det-pct">${pct(totalExp,income)}</span></div>`;
+
+  const fac=sum(allExp.filter(isFactura),r=>r.expense);
+  const bol=sum(allExp.filter(isBoleta),r=>r.expense);
+  const sin=sum(allExp.filter(r=>!isFactura(r)&&!isBoleta(r)),r=>r.expense);
+  const tot=fac+bol+sin;
+  document.getElementById('mov-doc').innerHTML=`
+    <div class="det-hdr"><span class="det-lbl">Tipo documento</span><span class="det-amt">Monto</span><span class="det-pct">% Gasto</span></div>
+    <div class="det-row"><span class="det-lbl">Factura</span><span class="det-amt" style="color:var(--green)">${fmt(fac)}</span><span class="det-pct">${pct(fac,tot)}</span></div>
+    <div class="det-row"><span class="det-lbl">Boleta</span><span class="det-amt" style="color:var(--amber)">${fmt(bol)}</span><span class="det-pct">${pct(bol,tot)}</span></div>
+    <div class="det-row"><span class="det-lbl">Sin sustento / otros</span><span class="det-amt" style="color:var(--muted)">${fmt(sin)}</span><span class="det-pct">${pct(sin,tot)}</span></div>
+    <div class="det-row det-total"><span class="det-lbl">TOTAL</span><span class="det-amt">${fmt(tot)}</span><span class="det-pct">100%</span></div>
+    <div style="margin-top:10px;font-size:11px;color:var(--muted);line-height:1.6">Solo <strong>facturas</strong> generan crédito fiscal IGV.</div>`;
+
+  buildMovMonthly();
+}
+
+// ── Build JLM P&L ─────────────────────────────────────────────────────────
+function buildJLM(){
+  const persRows=getRows('personal');
+  const{income,expTotal,balance,igvVentas,igvCredito,igvNeto,expByCat,incByCat,expRows}=computeJLMPNL(persRows);
+
+  const[fy,fm]=filterFrom.split('-').map(Number);
+  const[ty,tm]=filterTo.split('-').map(Number);
+  const fromLbl=MES_S[fm-1]+' '+fy;
+  const toLbl  =MES_S[tm-1]+' '+ty;
+  const lbl=filterFrom===filterTo?fromLbl:`${fromLbl} – ${toLbl}`;
+  document.getElementById('jlm-sub').textContent=lbl;
+  document.getElementById('jlm-sub2').textContent=lbl;
+
+  document.getElementById('jlm-kpis').innerHTML=`
+    <div class="kpi k-g"><div class="kpi-lbl">Ingresos</div><div class="kpi-val g">${fmt(income)}</div><div class="kpi-hint">total recibido</div></div>
+    <div class="kpi k-r"><div class="kpi-lbl">Gastos</div><div class="kpi-val r">${fmt(expTotal)}</div><div class="kpi-hint">${pct(expTotal,income)} de ingresos</div></div>
+    <div class="kpi ${balance>=0?'k-g':'k-r'}"><div class="kpi-lbl">Balance</div><div class="kpi-val ${balance>=0?'g':'r'}">${fmt(balance)}</div><div class="kpi-hint">margen ${pct(balance,income)}</div></div>
+    <div class="kpi k-b"><div class="kpi-lbl">Crédito Fiscal IGV</div><div class="kpi-val b">${fmt(igvCredito)}</div><div class="kpi-hint">compras c/ factura</div></div>`;
+
+  const incEntries=Object.entries(incByCat).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('jlm-pnl').innerHTML=`
+    ${rSect('INGRESOS')}
+    ${incEntries.map(([k,v])=>rLine(k,v,'pos',pct(v,income))).join('')}
+    ${rSub('Total Ingresos',income,'pos','')}
+    ${igvVentas>0?rLine('(-) IGV estimado en ventas',igvVentas,'neg',''):''}
+    ${rSect('GASTOS')}
+    ${Object.entries(expByCat).sort((a,b)=>b[1]-a[1]).map(([k,v])=>rLine(CAT_LABELS[k]||k,v,'neg','-'+pct(v,income))).join('')}
+    ${rSub('Total Gastos',expTotal,'neg','-'+pct(expTotal,income))}
+    ${rHL('BALANCE NETO',balance,balance>=0?'pos':'neg',pct(balance,income),balance>=0?'net net-pos':'net net-neg')}`;
+
+  document.getElementById('jlm-igv').innerHTML=`
+    <div class="igv-title">⚖ Posición IGV · JLM · ${lbl}</div>
+    <div class="igv-row"><span>IGV débito en ventas / servicios</span><span class="igv-amt d">${igvVentas>0?fmt(igvVentas):'<span style="color:var(--muted)">—</span>'}</span></div>
+    <div class="igv-row"><span>(-) IGV crédito fiscal (compras c/ factura)</span><span class="igv-amt c">${igvCredito>0?fmt(igvCredito):'<span style="color:var(--muted)">—</span>'}</span></div>
+    <div class="igv-row igv-total"><span>IGV NETO ESTIMADO</span><span class="igv-amt n">${fmt(igvNeto)}</span></div>
+    <div class="igv-footer">Aplica si JLM opera como persona natural con RUC.</div>`;
+
+  const order=['materiales','servicios','equipos','transporte','planilla','admin','marketing','otros'];
+  const totalExp2=order.reduce((s,k)=>s+(expByCat[k]||0),0);
+  document.getElementById('jlm-det').innerHTML=`
+    <div class="det-hdr"><span class="det-lbl">Categoría</span><span class="det-amt">Monto</span><span class="det-pct">% Ing.</span></div>
+    ${order.filter(k=>expByCat[k]>0).map(k=>`<div class="det-row">
+      <span class="det-lbl">${CAT_LABELS[k]}</span>
+      <span class="det-amt" style="color:var(--red)">${fmt(expByCat[k])}</span>
+      <span class="det-pct">${pct(expByCat[k],income)}</span>
+    </div>`).join('')}
+    <div class="det-row det-total"><span class="det-lbl">TOTAL GASTOS</span><span class="det-amt" style="color:var(--red)">${fmt(totalExp2)}</span><span class="det-pct">${pct(totalExp2,income)}</span></div>`;
+
+  const fac=sum(expRows.filter(isFactura),r=>r.expense);
+  const bol=sum(expRows.filter(isBoleta),r=>r.expense);
+  const sin=sum(expRows.filter(r=>!isFactura(r)&&!isBoleta(r)),r=>r.expense);
+  const tot=fac+bol+sin;
+  document.getElementById('jlm-doc').innerHTML=`
+    <div class="det-hdr"><span class="det-lbl">Tipo documento</span><span class="det-amt">Monto</span><span class="det-pct">% Gasto</span></div>
+    <div class="det-row"><span class="det-lbl">Factura</span><span class="det-amt" style="color:var(--green)">${fmt(fac)}</span><span class="det-pct">${pct(fac,tot)}</span></div>
+    <div class="det-row"><span class="det-lbl">Boleta</span><span class="det-amt" style="color:var(--amber)">${fmt(bol)}</span><span class="det-pct">${pct(bol,tot)}</span></div>
+    <div class="det-row"><span class="det-lbl">Sin sustento / otros</span><span class="det-amt" style="color:var(--muted)">${fmt(sin)}</span><span class="det-pct">${pct(sin,tot)}</span></div>
+    <div class="det-row det-total"><span class="det-lbl">TOTAL</span><span class="det-amt">${fmt(tot)}</span><span class="det-pct">100%</span></div>`;
+
+  buildJLMMonthly();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────
+function render(){
+  if(!filterFrom||!filterTo)return;
+  buildMov();
+  buildJLM();
+  const[fy,fm]=filterFrom.split('-').map(Number);
+  const[ty,tm]=filterTo.split('-').map(Number);
+  const lbl=filterFrom===filterTo?MES_S[fm-1]+' '+fy:`${MES_S[fm-1]} ${fy} – ${MES_S[tm-1]} ${ty}`;
+  document.getElementById('header-sub').textContent=`Período: ${lbl} · actualizado ${new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})}`;
+  document.getElementById('footer-ts').textContent=new Date().toLocaleString('es-PE',{dateStyle:'short',timeStyle:'short'});
+}
+
+// ── Load ──────────────────────────────────────────────────────────────────
+async function load(){
+  try{
+    const res=await Promise.allSettled([
+      fetchGviz(SHEETS[0].id,SHEETS[0].sheet),
+      fetchGviz(SHEETS[1].id,SHEETS[1].sheet),
+      ...CC_SHEETS.map(s=>fetchGviz(s.id,''))
+    ]);
+    DATA.personal=res[0].status==='fulfilled'?parseSheet(res[0].value,SHEETS[0]):[];
+    DATA.sac     =res[1].status==='fulfilled'?parseSheet(res[1].value,SHEETS[1]):[];
+    DATA.cc=[];
+    CC_SHEETS.forEach((s,i)=>{
+      if(res[2+i].status==='fulfilled')DATA.cc.push(...parseCCSheet(res[2+i].value,s.person));
+    });
+    populateSelects();
+    render();
+  }catch(e){console.error(e);}
+  document.getElementById('loading').classList.add('hidden');
+}
+
+function downloadPDF(){
+  const now=new Date();
+  document.getElementById('ph-date').textContent='Descargado el '+now.toLocaleDateString('es-PE',{dateStyle:'full'})+' · '+now.toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'});
+  window.print();
+}
+
+load();
+</script>
+</body>
+</html>

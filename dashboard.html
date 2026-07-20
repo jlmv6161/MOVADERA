@@ -128,7 +128,7 @@
         .neg-project td { background: rgba(220,38,38,0.04); }
         /* Modal */
         .modal-overlay { display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); z-index:500; overflow-y:auto; padding:24px; }
-        .modal-box { max-width:720px; margin:48px auto; background:var(--surface); border-radius:var(--r); border:1px solid var(--border); padding:24px; }
+        .modal-box { max-width:860px; margin:48px auto; background:var(--surface); border-radius:var(--r); border:1px solid var(--border); padding:24px; }
         .modal-hdr { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:18px; }
         .modal-close { background:transparent; border:1px solid var(--border); color:var(--muted); padding:5px 13px; border-radius:6px; cursor:pointer; font-size:12px; }
         .modal-close:hover { border-color:var(--red); color:var(--red); }
@@ -143,6 +143,17 @@
         .sac-bal-card { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:20px; border-left:3px solid var(--cyan); }
         .sac-bal-amount { font-size:26px; font-weight:700; letter-spacing:-0.5px; transition:filter 0.25s ease; user-select:none; }
         .sac-bal-amount.blurred { filter:blur(9px); pointer-events:none; }
+        .sac-bal-amount:not(.blurred) { cursor:pointer; text-decoration:underline dotted; text-underline-offset:5px; }
+        .sac-bal-amount:not(.blurred):hover { color:var(--amber) !important; }
+
+        /* Paginador de modal */
+        .pager { display:flex; align-items:center; justify-content:center; gap:4px; flex-wrap:wrap; margin-top:16px; padding-top:14px; border-top:1px solid var(--border); }
+        .pg-btn { min-width:30px; height:28px; padding:0 9px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--muted); font-size:12px; cursor:pointer; font-family:inherit; transition:all 0.15s; }
+        .pg-btn:hover:not(:disabled) { border-color:var(--indigo); color:var(--indigo); }
+        .pg-btn.active { background:var(--indigo); border-color:var(--indigo); color:#fff; font-weight:700; }
+        .pg-btn:disabled { opacity:0.3; cursor:default; }
+        .pg-gap { color:var(--muted); padding:0 3px; font-size:12px; }
+        .pg-info { width:100%; text-align:center; font-size:11px; color:var(--muted); margin-top:8px; }
         .sac-reveal-btn { display:flex; align-items:center; gap:6px; padding:8px 16px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--muted); font-size:12px; cursor:pointer; transition:all 0.15s; white-space:nowrap; flex-shrink:0; }
         .sac-reveal-btn:hover { border-color:var(--cyan); color:var(--cyan); }
         .btn-pdf { padding:5px 12px; border-radius:6px; background:transparent; border:1px solid var(--border); color:var(--muted); font-size:12px; cursor:pointer; transition:all 0.15s; }
@@ -485,6 +496,7 @@
             <tfoot id="modal-foot"></tfoot>
         </table>
         </div>
+        <div id="modal-pager"></div>
     </div>
 </div>
 
@@ -1117,36 +1129,127 @@ function buildTable(months) {
 
 // ── SAC account balance ───────────────────────────────────────────────────
 let _sacBalVisible = false;
+let _sacKardex = [];          // orden cronológico ascendente, con saldo corrido
+let _sacPage = 0;
+const SAC_PAGE_SIZE = 30;
+
+// Solo los movimientos que realmente tocan la cuenta bancaria:
+// ingresos NO cash (los cash no entran al banco) y todas las salidas.
+function buildSACKardex(sacRawRows) {
+    const isCash = r => (r.method || '').toLowerCase() === 'cash';
+    const rows = sacRawRows.map(r => {
+        const inflow  = isCash(r) ? 0 : r.income;
+        const outflow = r.expense;
+        if (inflow === 0 && outflow === 0) return null;
+        return {
+            date: r.date,
+            description: r.description || 'Sin detalle',
+            project: r.project && r.project !== 'Sin proyecto' ? r.project : '',
+            method: r.method || '',
+            inflow, outflow,
+            delta: inflow - outflow
+        };
+    }).filter(Boolean);
+    rows.sort((a, b) => a.date - b.date);
+    let running = 0;
+    rows.forEach(r => { running += r.delta; r.balance = running; });
+    return rows;
+}
+
 function updateSACBalance(sacRawRows = []) {
     const isCash  = r => (r.method || '').toLowerCase() === 'cash';
     const income  = sacRawRows.filter(r => !isCash(r)).reduce((s, r) => s + r.income,  0);
     const expense = sacRawRows.reduce((s, r) => s + r.expense, 0);
     const bal = income - expense;
+    _sacKardex = buildSACKardex(sacRawRows);
     const el = document.getElementById('sac-bal-val');
     el.textContent = (bal >= 0 ? '+' : '−') + fmt(Math.abs(bal));
     el.className = 'sac-bal-amount blurred ' + (bal >= 0 ? 'tc' : 'nc');
+    el.onclick = () => showSACKardex(0);
+    el.title = 'Ver kardex de la cuenta';
     _sacBalVisible = false;
     document.getElementById('sac-eye-icon').textContent  = '👁';
     document.getElementById('sac-btn-label').textContent = 'Ver saldo';
-    document.getElementById('sac-bal-hint').textContent  =
-        `Ing. banco: ${fmt(income)} · Sal. totales: ${fmt(expense)} · clic para revelar`;
+    const hintEl = document.getElementById('sac-bal-hint');
+    hintEl.dataset.base = `Ing. banco: ${fmt(income)} · Sal. totales: ${fmt(expense)}`;
+    hintEl.textContent  = `${hintEl.dataset.base} · clic para revelar`;
+}
+
+// Botones de paginación: ‹ 1 … 4 5 6 … 12 ›
+function pagerButtons(cur, total, fnName) {
+    const btn = (p, label, cls = '') =>
+        `<button class="pg-btn ${cls}" ${p === null ? 'disabled' : `onclick="${fnName}(${p})"`}>${label}</button>`;
+    let out = btn(cur > 0 ? cur - 1 : null, '‹');
+    const wanted = [...new Set([0, cur - 1, cur, cur + 1, total - 1])]
+        .filter(p => p >= 0 && p < total).sort((a, b) => a - b);
+    let prev = -1;
+    wanted.forEach(p => {
+        if (p - prev > 1) out += '<span class="pg-gap">…</span>';
+        out += btn(p, p + 1, p === cur ? 'active' : '');
+        prev = p;
+    });
+    out += btn(cur < total - 1 ? cur + 1 : null, '›');
+    return out;
+}
+
+function showSACKardex(page = 0) {
+    const desc = _sacKardex.slice().reverse();   // más reciente primero
+    const total = desc.length;
+    const totalPages = Math.max(1, Math.ceil(total / SAC_PAGE_SIZE));
+    _sacPage = Math.min(Math.max(0, page), totalPages - 1);
+    const start = _sacPage * SAC_PAGE_SIZE;
+    const slice = desc.slice(start, start + SAC_PAGE_SIZE);
+
+    document.getElementById('modal-title').textContent = 'Kardex · Cuenta SAC';
+    document.getElementById('modal-sub').textContent =
+        `${total} movimiento${total !== 1 ? 's' : ''} bancarios · página ${_sacPage + 1} de ${totalPages} · del más reciente al más antiguo`;
+    document.getElementById('modal-head').innerHTML =
+        '<tr><th>Fecha</th><th style="text-align:left;min-width:200px">Detalle</th><th>Entrada</th><th>Salida</th><th>Saldo</th></tr>';
+
+    document.getElementById('modal-body').innerHTML = slice.map(r => `
+        <tr>
+            <td style="white-space:nowrap">${r.date.toLocaleDateString('es-PE',{day:'2-digit',month:'short',year:'numeric'})}</td>
+            <td style="text-align:left">${r.description}${r.project ? `<span style="display:block;font-size:10px;color:var(--muted);margin-top:2px">${r.project}</span>` : ''}</td>
+            <td class="tc">${r.inflow  > 0 ? '+' + fmt(r.inflow)  : '<span style="color:var(--muted)">—</span>'}</td>
+            <td class="rc">${r.outflow > 0 ? '−' + fmt(r.outflow) : '<span style="color:var(--muted)">—</span>'}</td>
+            <td class="${r.balance >= 0 ? 'tc' : 'nc'}" style="font-weight:700;white-space:nowrap">${r.balance >= 0 ? '+' : '−'}${fmt(r.balance)}</td>
+        </tr>`).join('') || '<tr><td colspan="5" class="empty">Sin movimientos registrados</td></tr>';
+
+    const saldoFinal = total ? desc[0].balance : 0;
+    document.getElementById('modal-foot').innerHTML = total
+        ? `<tr><td colspan="4" style="text-align:left;font-weight:700">Saldo actual en cuenta SAC</td>
+             <td style="font-weight:700;white-space:nowrap" class="${saldoFinal >= 0 ? 'tc' : 'nc'}">${saldoFinal >= 0 ? '+' : '−'}${fmt(saldoFinal)}</td></tr>`
+        : '';
+
+    document.getElementById('modal-pager').innerHTML = totalPages > 1
+        ? `<div class="pager">${pagerButtons(_sacPage, totalPages, 'showSACKardex')}
+             <div class="pg-info">Mostrando ${start + 1}–${Math.min(start + SAC_PAGE_SIZE, total)} de ${total} movimientos</div>
+           </div>`
+        : '';
+
+    document.getElementById('cost-modal').style.display = 'block';
+    document.querySelector('#cost-modal .modal-box').scrollIntoView({ block: 'start' });
 }
 function toggleSACBal() {
     _sacBalVisible = !_sacBalVisible;
     const el  = document.getElementById('sac-bal-val');
     const btn = document.getElementById('sac-reveal-btn');
+    const hintEl = document.getElementById('sac-bal-hint');
+    const base = hintEl.dataset.base || '';
     if (_sacBalVisible) {
         el.classList.remove('blurred');
         document.getElementById('sac-eye-icon').textContent  = '🙈';
         document.getElementById('sac-btn-label').textContent = 'Ocultar';
         btn.style.borderColor = 'var(--cyan)';
         btn.style.color = 'var(--cyan)';
+        hintEl.textContent = `${base} · clic en el monto para ver el kardex`;
     } else {
         el.classList.add('blurred');
         document.getElementById('sac-eye-icon').textContent  = '👁';
         document.getElementById('sac-btn-label').textContent = 'Ver saldo';
         btn.style.borderColor = '';
         btn.style.color = '';
+        hintEl.textContent = `${base} · clic para revelar`;
     }
 }
 
@@ -1249,6 +1352,7 @@ function buildProjectStatus() {
 function showCostDetail(safeKey) {
     const projName = decodeURIComponent(safeKey);
     const rows = (window._projCostDetails || {})[projName] || [];
+    document.getElementById('modal-pager').innerHTML = '';
     document.getElementById('modal-title').textContent = 'Costos · ' + projName;
     document.getElementById('modal-sub').textContent = `${rows.length} movimiento${rows.length !== 1 ? 's' : ''} de salida`;
     document.getElementById('modal-head').innerHTML =
@@ -1273,6 +1377,7 @@ function showCostDetail(safeKey) {
 function showIncomeDetail(key) {
     const d = monthlyData[key] || {};
     const rows = [...(d.incomeRows || [])].sort((a, b) => b.date - a.date);
+    document.getElementById('modal-pager').innerHTML = '';
     const monthLabel = d.year ? `${MES_L[d.month-1]} ${d.year}` : key;
 
     const cuentaLabel = r => r.source === 'SAC' ? 'Movadera' : 'Personal';
@@ -1325,6 +1430,7 @@ function showIncomeDetail(key) {
 function showCCKardex(safeKey) {
     const person = decodeURIComponent(safeKey);
     const all = ccRawData[person] || [];
+    document.getElementById('modal-pager').innerHTML = '';
     // Orden cronológico ascendente ya viene con balance acumulado calculado; tomamos los últimos 30 y mostramos del más reciente al más antiguo
     const last30 = all.slice(-30).reverse();
 

@@ -135,8 +135,8 @@
         /* Caja chica table */
         .cc-person-col { text-align:left; min-width:110px; font-weight:600; }
         .tbl tfoot tr { background:#f8fafc; font-weight:700; }
-        .tbl .clickable-amt { cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; }
-        .tbl .clickable-amt:hover { color:var(--amber); }
+        .clickable-amt { cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; }
+        .clickable-amt:hover { color:var(--amber) !important; }
 
         footer { text-align: center; color: var(--muted); font-size: 11px; margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--border); }
         /* SAC balance card */
@@ -518,7 +518,7 @@ const MES_S = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov'
 const MES_L = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const CAT_COLORS = ['#10b981','#6366f1','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899','#84cc16','#14b8a6'];
 
-let allRows = [], monthlyData = {}, projectsData = [], ccRows = [], ccBalances = {}, charts = {};
+let allRows = [], monthlyData = {}, projectsData = [], ccRows = [], ccBalances = {}, ccRawData = {}, charts = {};
 let filterFrom = null, filterTo = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -834,6 +834,38 @@ function parseCCBalance(table) {
     // Recargas entran como negativo en el sheet, gastos como positivo.
     // Saldo real = recargas − gastos = −SUM
     return { balance: -sum };
+}
+
+function parseCCKardex(table, personName) {
+    const gv = (row, i) => { if (!row.c[i]) return null; const c=row.c[i]; return c.v!==null&&c.v!==undefined?c.v:(c.f||null); };
+    const gn = (row, i) => { const v=gv(row,i); return typeof v==='number'?v:(typeof v==='string'?parseFloat(v.replace(/,/g,''))||0:0); };
+    const gs = (row, i) => { const v=gv(row,i); return v?String(v).trim():''; };
+    const pd = v => {
+        if (!v) return null;
+        if (v instanceof Date) return v;
+        const s = String(v).trim();
+        const m = s.match(/Date\((\d+),(\d+),(\d+)/); if (m) return new Date(+m[1],+m[2],+m[3]);
+        const p = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+        if (p) { const y = p[3].length===2?2000+parseInt(p[3]):parseInt(p[3]); return new Date(y, parseInt(p[2])-1, parseInt(p[1])); }
+        const d = new Date(s); return isNaN(d) ? null : d;
+    };
+    const rows = (table.rows||[]).filter(r=>r&&r.c).map(r => {
+        const date = pd(gv(r, 2)); if (!date) return null;
+        const rawAmount = gn(r, 5); if (rawAmount === 0) return null;
+        // En el sheet: negativo = recarga (ingreso a la caja), positivo = gasto (salida).
+        // Invertimos el signo para que el kardex sea intuitivo: recarga (+), gasto (−).
+        return {
+            date,
+            description: gs(r, 4) || gs(r, 3) || 'Sin detalle',
+            isRecarga: rawAmount < 0,
+            amount: -rawAmount
+        };
+    }).filter(Boolean);
+
+    rows.sort((a,b) => a.date - b.date);
+    let running = 0;
+    rows.forEach(r => { running += r.amount; r.balance = running; });
+    return rows;
 }
 
 function parseCCTable(table, personName) {
@@ -1290,6 +1322,38 @@ function showIncomeDetail(key) {
     document.getElementById('cost-modal').style.display = 'block';
 }
 
+function showCCKardex(safeKey) {
+    const person = decodeURIComponent(safeKey);
+    const all = ccRawData[person] || [];
+    // Orden cronológico ascendente ya viene con balance acumulado calculado; tomamos los últimos 30 y mostramos del más reciente al más antiguo
+    const last30 = all.slice(-30).reverse();
+
+    document.getElementById('modal-title').textContent = 'Kardex Caja Chica · ' + person;
+    document.getElementById('modal-sub').textContent = `Últimos ${last30.length} movimiento${last30.length !== 1 ? 's' : ''} · del más reciente al más antiguo`;
+    document.getElementById('modal-head').innerHTML =
+        '<tr><th>Fecha</th><th style="text-align:left;min-width:220px">Descripción</th><th>Movimiento</th><th>Saldo</th></tr>';
+
+    document.getElementById('modal-body').innerHTML = last30.map(r => {
+        const mvHtml = r.isRecarga
+            ? `<span class="tc">+${fmt(r.amount)}</span>`
+            : `<span class="rc">−${fmt(r.amount)}</span>`;
+        const balHtml = `<span class="${r.balance >= 0 ? 'tc' : 'nc'}" style="font-weight:700">${r.balance >= 0 ? '+' : '−'}${fmt(r.balance)}</span>`;
+        return `<tr>
+            <td style="white-space:nowrap">${r.date.toLocaleDateString('es-PE',{day:'2-digit',month:'short',year:'numeric'})}</td>
+            <td style="text-align:left">${r.description}${r.isRecarga ? ' <span style="font-size:10px;color:var(--muted)">(recarga)</span>' : ''}</td>
+            <td>${mvHtml}</td>
+            <td>${balHtml}</td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="4" class="empty">Sin movimientos registrados</td></tr>';
+
+    document.getElementById('modal-foot').innerHTML = all.length
+        ? `<tr><td colspan="3" style="text-align:left;font-weight:700">Saldo actual (${person})</td>
+             <td style="font-weight:700" class="${all[all.length-1].balance >= 0 ? 'tc' : 'nc'}">${all[all.length-1].balance >= 0 ? '+' : '−'}${fmt(all[all.length-1].balance)}</td></tr>`
+        : '';
+
+    document.getElementById('cost-modal').style.display = 'block';
+}
+
 function closeCostModal() { document.getElementById('cost-modal').style.display = 'none'; }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCostModal(); });
 
@@ -1309,13 +1373,14 @@ function buildCCBalances() {
         const b = ccBalances[person];
         if (!b) return '';
         const pos = b.balance >= 0;
+        const safeKey = encodeURIComponent(person);
         return `<div style="
             background:${pos ? 'rgba(5,150,105,0.07)' : 'rgba(239,68,68,0.07)'};
             border:1px solid ${pos ? 'rgba(5,150,105,0.25)' : 'rgba(239,68,68,0.25)'};
             border-radius:10px; padding:12px 18px; min-width:160px; flex:1; max-width:220px">
             <div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px">${person}</div>
-            <div style="font-size:20px;font-weight:800;color:${pos ? 'var(--green)' : 'var(--red)'}">${fmt(b.balance)}</div>
-            <div style="font-size:10px;color:var(--muted);margin-top:3px">Saldo actual</div>
+            <div class="clickable-amt" onclick="showCCKardex('${safeKey}')" title="Ver últimos movimientos" style="font-size:20px;font-weight:800;color:${pos ? 'var(--green)' : 'var(--red)'}">${fmt(b.balance)}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:3px">Saldo actual · clic para ver detalle</div>
         </div>`;
     }).join('');
 }
@@ -1490,12 +1555,13 @@ async function load() {
     projectsData = pr.status==='fulfilled' ? parseProjects(pr.value) : (showErr('No se pudo cargar Proyectos: '+(pr.reason?.message||'error')), []);
 
     // Cajas chicas (carga en paralelo, fallos silenciosos — datos opcionales)
-    ccRows = []; ccBalances = {};
+    ccRows = []; ccBalances = {}; ccRawData = {};
     const ccResults = await Promise.allSettled(CC_SHEETS.map(s => fetchGviz(s.id, '')));
     ccResults.forEach((r, i) => {
         if (r.status === 'fulfilled') {
             ccRows.push(...parseCCTable(r.value, CC_SHEETS[i].person));
             ccBalances[CC_SHEETS[i].person] = parseCCBalance(r.value);
+            ccRawData[CC_SHEETS[i].person] = parseCCKardex(r.value, CC_SHEETS[i].person);
         }
     });
 

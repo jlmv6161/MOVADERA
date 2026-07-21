@@ -52,17 +52,33 @@ h1{font-size:20px;font-weight:700}
 .kpi-val.g{color:var(--green)}.kpi-val.r{color:var(--red)}.kpi-val.a{color:var(--amber)}.kpi-val.b{color:var(--blue)}
 .kpi-hint{font-size:10px;color:var(--muted);margin-top:2px}
 
-/* Monthly breakdown table */
+/* P&L matrix: conceptos en filas, meses en columnas */
 .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:18px}
-.month-tbl{width:100%;border-collapse:collapse;font-size:12.5px}
-.month-tbl th{padding:7px 11px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);border-bottom:2px solid var(--border);white-space:nowrap;background:var(--bg)}
-.month-tbl th:first-child{text-align:left;min-width:90px;position:sticky;left:0;z-index:1;background:var(--bg)}
-.month-tbl td{padding:7px 11px;text-align:right;border-bottom:1px solid rgba(0,0,0,.04);white-space:nowrap}
-.month-tbl td:first-child{text-align:left;font-weight:600;position:sticky;left:0;background:var(--surface);z-index:1}
-.month-tbl tr:hover td{background:rgba(0,0,0,.02)}
-.month-tbl tr:hover td:first-child{background:rgba(241,245,249,.8)}
-.month-tbl tr.total-row td{border-top:2px solid var(--border);font-weight:700;border-bottom:none;background:rgba(0,0,0,.02)}
-.month-tbl tr.total-row td:first-child{background:rgba(0,0,0,.04)}
+.pnl-matrix{width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
+.pnl-matrix th{padding:8px 11px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);border-bottom:2px solid var(--border);white-space:nowrap;background:var(--bg)}
+.pnl-matrix th.c-concept{text-align:left;min-width:200px;position:sticky;left:0;z-index:3}
+.pnl-matrix th.c-total{position:sticky;right:0;z-index:3;background:#eef2ff;color:var(--indigo);border-left:2px solid #c7d2fe}
+.pnl-matrix td{padding:6px 11px;text-align:right;white-space:nowrap;border-bottom:1px solid rgba(0,0,0,.04);background:var(--surface)}
+.pnl-matrix td.c-concept{text-align:left;position:sticky;left:0;z-index:2}
+.pnl-matrix td.c-total{position:sticky;right:0;z-index:2;background:#f8faff;font-weight:700;border-left:2px solid #c7d2fe}
+
+.pnl-matrix tr.r-section td{background:var(--bg);font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);padding:10px 11px 5px;border-bottom:none}
+.pnl-matrix tr.r-section td.c-total{background:#eef2ff}
+.pnl-matrix tr.r-line td.c-concept{padding-left:24px;color:var(--text)}
+.pnl-matrix tr.r-sub td{font-weight:700;border-top:1px solid var(--border)}
+.pnl-matrix tr.r-sub td.c-concept{padding-left:24px}
+.pnl-matrix tr.r-hl td{background:rgba(0,0,0,.035);font-weight:700}
+.pnl-matrix tr.r-hl td.c-total{background:#e8edff}
+.pnl-matrix tr.r-ebit td{background:var(--green-dim);font-weight:700}
+.pnl-matrix tr.r-ebit td.c-total{background:rgba(5,150,105,.16)}
+.pnl-matrix tr.r-net td{background:var(--green);font-weight:800;color:#fff;font-size:12.5px}
+.pnl-matrix tr.r-net td.c-total{background:#047857;border-left-color:#065f46}
+.pnl-matrix tr.r-net td .pos,.pnl-matrix tr.r-net td .neg,.pnl-matrix tr.r-net td .mut{color:#fff!important}
+.pnl-matrix tr.r-pct td{font-size:11px}
+.pnl-matrix tr.r-igv td.c-concept{padding-left:24px}
+.pnl-matrix tr.r-line:hover td,.pnl-matrix tr.r-sub:hover td{background:rgba(79,70,229,.05)}
+.pnl-matrix tr.r-line:hover td.c-total,.pnl-matrix tr.r-sub:hover td.c-total{background:#eaeeff}
+
 .pos{color:var(--green)}.neg{color:var(--red)}.mut{color:var(--muted)}.b{color:var(--blue)}
 .empty-months{padding:28px 0;text-align:center;color:var(--muted);font-size:13px}
 
@@ -163,7 +179,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:28px;paddi
     <div class="card-title">Resultados por mes</div>
     <div class="card-sub">Desglose mensual del período seleccionado</div>
     <div class="tbl-wrap">
-      <table class="month-tbl" id="mov-monthly"></table>
+      <table class="pnl-matrix" id="mov-monthly"></table>
     </div>
   </div>
 
@@ -206,7 +222,7 @@ footer{text-align:center;color:var(--muted);font-size:11px;margin-top:28px;paddi
     <div class="card-title">Resultados por mes</div>
     <div class="card-sub">Desglose mensual del período seleccionado</div>
     <div class="tbl-wrap">
-      <table class="month-tbl" id="jlm-monthly"></table>
+      <table class="pnl-matrix" id="jlm-monthly"></table>
     </div>
   </div>
 
@@ -474,93 +490,96 @@ function rHL(lbl,amt,amtCls,pctVal='',cls='hl'){
 }
 function rSect(lbl){return`<div class="pnl-section"><span style="flex:1">${lbl}</span></div>`;}
 
-// ── Monthly table ─────────────────────────────────────────────────────────
+// ── Matriz P&L: conceptos en filas, meses en columnas ─────────────────────
+// Cada def: {section:'...'} o {label, cls, cell:(pnlObj)=>htmlCelda}
+const mC = (get, clsArg) => r => { const v = get(r); return fmtC(Math.round(v), typeof clsArg === 'function' ? clsArg(v) : clsArg); };
+const D  = (label, cls, cell) => ({ label, cls, cell });
+
+function renderPnlMatrix(elId, cols, T, defs){
+  const el = document.getElementById(elId);
+  if(!cols.length){ el.innerHTML = '<tr><td class="empty-months">Sin datos en el período seleccionado</td></tr>'; return; }
+  const head = '<thead><tr><th class="c-concept">Concepto</th>' +
+    cols.map(c => `<th>${c.label}</th>`).join('') +
+    '<th class="c-total">TOTAL</th></tr></thead>';
+  const body = defs.map(d => {
+    if(d.section){
+      return `<tr class="r-section"><td class="c-concept">${d.section}</td>` +
+        cols.map(()=>'<td></td>').join('') + '<td class="c-total"></td></tr>';
+    }
+    return `<tr class="${d.cls}"><td class="c-concept">${d.label}</td>` +
+      cols.map(c => `<td>${d.cell(c)}</td>`).join('') +
+      `<td class="c-total">${d.cell(T)}</td></tr>`;
+  }).join('');
+  el.innerHTML = head + '<tbody>' + body + '</tbody>';
+}
+
 function buildMovMonthly(){
-  const months=getMonthsInRange();
-  if(!months.length){
-    document.getElementById('mov-monthly').innerHTML='<tr><td class="empty-months">Sin datos en el período seleccionado</td></tr>';
-    return;
-  }
-  const rows=months.map(({year,month})=>{
-    const sac=DATA.sac.filter(r=>r.year===year&&r.month===month);
-    const cc =DATA.cc.filter(r=>r.year===year&&r.month===month);
-    return{label:MES_S[month-1]+' '+year,...computeMovPNL(sac,cc)};
+  const months = getMonthsInRange();
+  const cols = months.map(({year,month}) => {
+    const sac = DATA.sac.filter(r => r.year===year && r.month===month);
+    const cc  = DATA.cc.filter(r => r.year===year && r.month===month);
+    return { label: MES_S[month-1] + ' ' + String(year).slice(2), ...computeMovPNL(sac, cc) };
   });
-  const T={income:0,igvVentas:0,incomeNet:0,cogs:0,utilBruta:0,opex:0,ebitda:0,ir:0,utilNeta:0,igvNeto:0};
-  rows.forEach(r=>{for(const k of Object.keys(T))T[k]+=r[k]||0;});
-  const td=(v,cls='')=>`<td>${fmtC(Math.round(v),cls)}</td>`;
-  const rowsHtml=rows.map(r=>`<tr>
-    <td>${r.label}</td>
-    ${td(r.income,'pos')}
-    ${td(r.igvVentas,'neg')}
-    ${td(r.incomeNet,'pos')}
-    ${td(r.cogs,'neg')}
-    ${td(r.utilBruta,r.utilBruta>=0?'pos':'neg')}
-    ${td(r.opex,'neg')}
-    <td>${pctC(r.ebitda,r.incomeNet)}</td>
-    ${td(r.ebitda,r.ebitda>=0?'pos':'neg')}
-    ${td(r.igvNeto,'b')}
-  </tr>`).join('');
-  document.getElementById('mov-monthly').innerHTML=`
-    <thead><tr>
-      <th style="text-align:left">Mes</th>
-      <th>Ingresos</th><th>(-) IGV Ventas</th><th>Ing. Neto</th>
-      <th>COGS</th><th>Util. Bruta</th><th>OPEX</th>
-      <th>Margen</th><th>EBITDA</th><th>IGV Neto</th>
-    </tr></thead>
-    <tbody>${rowsHtml}</tbody>
-    <tfoot><tr class="total-row">
-      <td>TOTAL</td>
-      ${td(T.income,'pos')}
-      ${td(T.igvVentas,'neg')}
-      ${td(T.incomeNet,'pos')}
-      ${td(T.cogs,'neg')}
-      ${td(T.utilBruta,T.utilBruta>=0?'pos':'neg')}
-      ${td(T.opex,'neg')}
-      <td>${pctC(T.ebitda,T.incomeNet)}</td>
-      ${td(T.ebitda,T.ebitda>=0?'pos':'neg')}
-      ${td(T.igvNeto,'b')}
-    </tr></tfoot>`;
+  const T = computeMovPNL(getRows('sac'), getRows('cc'));
+  const defs = [
+    { section:'INGRESOS' },
+    D('Cobros por proyectos', 'r-line', mC(r=>r.income, 'pos')),
+    D('(-) IGV débito fiscal 18%', 'r-line', mC(r=>r.igvVentas, 'neg')),
+    D('Ingresos netos', 'r-sub', mC(r=>r.incomeNet, 'pos')),
+    { section:'COSTO DE VENTAS (COGS)' },
+    D('Materiales e insumos', 'r-line', mC(r=>r.expByCat.materiales||0, 'neg')),
+    D('Servicios de terceros', 'r-line', mC(r=>r.expByCat.servicios||0, 'neg')),
+    D('Herramientas y equipos', 'r-line', mC(r=>r.expByCat.equipos||0, 'neg')),
+    D('Transporte y fletes', 'r-line', mC(r=>r.expByCat.transporte||0, 'neg')),
+    D('Caja chica operativa', 'r-line', mC(r=>r.expByCat.cc||0, 'neg')),
+    D('Total COGS', 'r-sub', mC(r=>r.cogs, 'neg')),
+    D('UTILIDAD BRUTA', 'r-hl', mC(r=>r.utilBruta, v=>v>=0?'pos':'neg')),
+    { section:'GASTOS OPERATIVOS (OPEX)' },
+    D('Planilla y remuneraciones', 'r-line', mC(r=>r.expByCat.planilla||0, 'neg')),
+    D('Gastos administrativos', 'r-line', mC(r=>r.expByCat.admin||0, 'neg')),
+    D('Marketing y publicidad', 'r-line', mC(r=>r.expByCat.marketing||0, 'neg')),
+    D('Otros gastos', 'r-line', mC(r=>r.expByCat.otros||0, 'neg')),
+    D('Total OPEX', 'r-sub', mC(r=>r.opex, 'neg')),
+    D('UTILIDAD OPERATIVA (EBITDA)', 'r-ebit', mC(r=>r.ebitda, v=>v>=0?'pos':'neg')),
+    D('Margen EBITDA', 'r-pct', r=>pctC(r.ebitda, r.incomeNet)),
+    { section:'IMPUESTO A LA RENTA' },
+    D('IR estimado 29.5%', 'r-line', mC(r=>r.ir, 'neg')),
+    D('UTILIDAD NETA ESTIMADA', 'r-net', mC(r=>r.utilNeta, v=>v>=0?'pos':'neg')),
+    { section:'POSICIÓN IGV' },
+    D('IGV neto a pagar', 'r-igv', mC(r=>r.igvNeto, 'b')),
+  ];
+  renderPnlMatrix('mov-monthly', cols, T, defs);
 }
 
 function buildJLMMonthly(){
-  const months=getMonthsInRange();
-  if(!months.length){
-    document.getElementById('jlm-monthly').innerHTML='<tr><td class="empty-months">Sin datos en el período seleccionado</td></tr>';
-    return;
-  }
-  const rows=months.map(({year,month})=>{
-    const pers=DATA.personal.filter(r=>r.year===year&&r.month===month);
-    return{label:MES_S[month-1]+' '+year,...computeJLMPNL(pers)};
+  const months = getMonthsInRange();
+  const cols = months.map(({year,month}) => {
+    const pers = DATA.personal.filter(r => r.year===year && r.month===month);
+    return { label: MES_S[month-1] + ' ' + String(year).slice(2), ...computeJLMPNL(pers) };
   });
-  const T={income:0,expTotal:0,balance:0,igvVentas:0,igvCredito:0,igvNeto:0};
-  rows.forEach(r=>{for(const k of Object.keys(T))T[k]+=r[k]||0;});
-  const td=(v,cls='')=>`<td>${fmtC(Math.round(v),cls)}</td>`;
-  const rowsHtml=rows.map(r=>`<tr>
-    <td>${r.label}</td>
-    ${td(r.income,'pos')}
-    ${td(r.expTotal,'neg')}
-    <td>${pctC(r.balance,r.income)}</td>
-    ${td(r.balance,r.balance>=0?'pos':'neg')}
-    ${td(r.igvCredito,'pos')}
-    ${td(r.igvNeto,'b')}
-  </tr>`).join('');
-  document.getElementById('jlm-monthly').innerHTML=`
-    <thead><tr>
-      <th style="text-align:left">Mes</th>
-      <th>Ingresos</th><th>Gastos</th><th>Margen</th><th>Balance</th>
-      <th>Crédito Fiscal</th><th>IGV Neto</th>
-    </tr></thead>
-    <tbody>${rowsHtml}</tbody>
-    <tfoot><tr class="total-row">
-      <td>TOTAL</td>
-      ${td(T.income,'pos')}
-      ${td(T.expTotal,'neg')}
-      <td>${pctC(T.balance,T.income)}</td>
-      ${td(T.balance,T.balance>=0?'pos':'neg')}
-      ${td(T.igvCredito,'pos')}
-      ${td(T.igvNeto,'b')}
-    </tr></tfoot>`;
+  const T = computeJLMPNL(getRows('personal'));
+  const defs = [
+    { section:'INGRESOS' },
+    D('Ingresos totales', 'r-line', mC(r=>r.income, 'pos')),
+    D('(-) IGV estimado en ventas', 'r-line', mC(r=>r.igvVentas, 'neg')),
+    { section:'GASTOS' },
+    D('Materiales e insumos', 'r-line', mC(r=>r.expByCat.materiales||0, 'neg')),
+    D('Servicios de terceros', 'r-line', mC(r=>r.expByCat.servicios||0, 'neg')),
+    D('Herramientas y equipos', 'r-line', mC(r=>r.expByCat.equipos||0, 'neg')),
+    D('Transporte y fletes', 'r-line', mC(r=>r.expByCat.transporte||0, 'neg')),
+    D('Caja chica operativa', 'r-line', mC(r=>r.expByCat.cc||0, 'neg')),
+    D('Planilla y remuneraciones', 'r-line', mC(r=>r.expByCat.planilla||0, 'neg')),
+    D('Gastos administrativos', 'r-line', mC(r=>r.expByCat.admin||0, 'neg')),
+    D('Marketing y publicidad', 'r-line', mC(r=>r.expByCat.marketing||0, 'neg')),
+    D('Otros gastos', 'r-line', mC(r=>r.expByCat.otros||0, 'neg')),
+    D('Total Gastos', 'r-sub', mC(r=>r.expTotal, 'neg')),
+    D('BALANCE NETO', 'r-net', mC(r=>r.balance, v=>v>=0?'pos':'neg')),
+    D('Margen', 'r-pct', r=>pctC(r.balance, r.income)),
+    { section:'POSICIÓN IGV' },
+    D('Crédito fiscal (compras c/factura)', 'r-line', mC(r=>r.igvCredito, 'pos')),
+    D('IGV neto estimado', 'r-igv', mC(r=>r.igvNeto, 'b')),
+  ];
+  renderPnlMatrix('jlm-monthly', cols, T, defs);
 }
 
 // ── Build Movadera P&L ────────────────────────────────────────────────────
